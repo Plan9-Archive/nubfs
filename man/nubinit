@@ -1,0 +1,250 @@
+.TH NUBINIT 3
+.SH NAME
+nubinit, nubattach, nubopen, nubcreate, nubwalk, nubread, nubwrite, nubremove, nubstat, nubsync, nubwstat, nubclunk, nubflush, nubreplay, loginit, diskinit \- nub storage system
+.SH SYNOPSIS
+.de PB
+.PP
+.ft L
+.nf
+..
+.PB
+#include <u.h>
+#include <libc.h>
+#include <auth.h>
+#include <fcall.h>
+#include <thread.h>
+.PB
+#include "nubfs.h"
+.PB
+typedef struct Disk Disk;
+typedef struct Fid Fid;
+typedef struct LogFile LogFile;
+typedef struct Walkqid Walkqid;
+.PB
+void	nubinit(LogFile *alog, Disk *adisk, char *uid)
+.PB
+LogFile*	logopen(int lfd, u64int length)
+.PB
+Disk*	diskinit(int fd, uint allocsize, u64int base, u32int length)
+.PB
+void	nubreplay(void)
+.PB
+void	nubflush(void)
+.PB
+Fid*	mkfid(u32int fid, String *uname)
+void	putfid(Fid*);
+.PB
+Fid*	nubattach(Fid *f, String *uid, char *aname)
+.PB
+struct Walkqid
+{
+	Fid*	clone;
+	int	nqid;
+	Qid	qid[];
+};
+.PB
+Walkqid*	nubwalk(Fid *f, Fid *newfid, int nname, char **names)
+.PB
+Fid*	nubopen(Fid *f, uint omode)
+Fid*	nubcreate(Fid *f, char *name, uint omode, u32int perm)
+usize	nubwrite(Fid *f, void *a, usize count, u64int offset)
+usize	nubread(Fid *f, void *a, usize count, u64int offset)
+void	nubremove(Fid *f)
+void	nubstat(Fid *f, Dir *d)
+void	nubsync(Fid *f)
+void	nubwstat(Fid *f, Dir *d)
+void	nubclunk(Fid *f)
+.PB
+int	waserror(void)
+void	poperror(void)
+void	raise(char*);
+.SH DESCRIPTION
+This library implements a persistent storage system, storing data in a
+.B Disk
+and metadata in a separate
+.BR LogFile .
+.IR Nubfs (4)
+uses this library to provide a persistent storage system accessed using normal file system operations using 9P.
+.PP
+.I Nubinit
+initialises the library state to refer to a given
+.I disk
+and
+.IR log ,
+created by
+.IR diskopen
+and
+.IR logopen ,
+described below.
+It creates a root of an empty file system, owned by the given
+.IR uid .
+.PP
+The files containing data and metadata are intended to be stored on disk partitions.
+For experimental use, storage is accessed using file descriptors.
+.I Logopen
+takes a file descriptor open for reading and writing on a file that
+must be at least
+.I length
+bytes long, and returns a
+.B LogFile
+value for use by
+.IR nubinit .
+.I Diskinit
+similarly takes a file descriptor
+.IR fd ,
+a basic unit of disk allocation in bytes
+.IR allocsize ,
+and the
+.I base
+and
+.I length
+of a region within
+.IR fd
+where data is to be stored.
+.PP
+.I Nubreplay
+populates the root by replaying the current log.
+.PP
+.I Nubflush
+must be called when the application exits, to flush the log buffer to the log file,
+or the transactions currently buffered will not be preserved.
+In a user-level application,
+.IR atexit (2)
+might be used.
+.PP
+The next group of functions provides the functionality of the 9P requests documented in
+.IR intro (5).
+.PP
+A
+.B Fid
+is a pointer to an active file (or directory) in the file system.
+It has a 32-bit identifier corresponding to the
+.I fid
+of 9P, and the user name that owns the fid.
+.I Mkfid
+returns a new Fid referring to the given
+.I fid
+and
+.IR uname .
+.I Putfid
+disposes of the given
+.IR fid .
+The library assigns no meaning to the integer
+.I fid
+values, which are provided by the application (eg, a 9P file server implementation).
+.PP
+.I Nubattach
+attaches the root of the tree to Fid
+.IR f ,
+accessing on behalf of the given user
+.I uid
+(which replaces any user name currently
+associated with
+.IR f ).
+.I Aname
+refers to a particular tree (cf. the
+.I aname
+parameter of
+.IR attach (5));
+it is currently ignored.
+.PP
+.I Nubwalk
+walks Fid
+.I f
+from its current location in the hierarchy using the
+.I nname
+successive names in the array
+.IR name .
+.I Newfid
+is either nil, or refers to a newly-allocated Fid not currently pointing into the file system.
+If the walk is successful, the resulting file system pointer is assigned to
+.I newfid
+if it is not nil, and otherwise to
+.IR f ,
+replacing its original value.
+.I Nubwalk
+returns a
+.B  Walkqid
+value that represents the result of the walk.
+If the walk was successful, then element
+.B clone
+contains the result of the walk.
+Otherwise,
+.B nqid
+is the number of entries of
+.I name
+that were walked successfully, and
+.B clone
+is nil.
+If the first entry of
+.I name
+was invalid,
+.I nubwalk
+instead raises an error.
+.PP
+.I Nubopen
+attempts to open
+.I f
+with the given open mode (see
+.IR open (5)
+for the set of modes).
+It returns
+.I f
+on success, or raises an error.
+.PP
+.I Nubcreate ,
+.I nubwrite ,
+.I nubread ,
+.I nubstat
+and
+.I nubwstat
+perform the actions described by
+.IR open (5),
+.I read (5)
+and
+.IR stat (5) .
+.PP
+.I Nubsync
+flushes any data currently buffered for
+.IR f .
+.PP
+.I Nubremove
+attempts to remove the file system entry referenced by
+.IR f .
+It raises an error on failure.
+If the file was successfully removed,
+.I f
+no longer refers to a file system entry.
+.PP
+.I Nubclunk
+cancels any association between
+.I f
+and the file system.
+.PP
+The application must call
+.I putfid
+to dispose of a Fid, even when it has been clunked or removed.
+.SS Error handling
+The library uses an error-handling scheme similar to that used by the Plan 9 kernel.
+Most functions have no error return.
+If they have a return value, that will always be valid on return.
+If an error occurs, a function will not return, but instead an exception will be raised, resulting
+in an error return from a call to
+.IR waserror .
+The conventions for
+.I waserror
+and
+.I poperror
+are the same as those for the kernel.
+The exception-raising function has a different name: it is
+.IR raise ,
+not
+.IR error ,
+and
+.B raise(nil)
+is the equivalent of the kernel's
+.IR nexterror .
+.SH SOURCE
+.B /usr/forsyth/src/nubfs
+.SH SEE ALSO
+.IR nubfs (4)

@@ -1,0 +1,82 @@
+.TH NUBFS 4
+.SH NAME
+nubfs \- log-based file system for replicated storage
+.SH SYNOPSIS
+.B nubfs
+[
+.BI "-D" "debug"
+]
+[
+.BI "-s" " srvname"
+]
+.I datafile
+.I logfile
+.PP
+.B mknub
+.SH DESCRIPTION
+.I Nubfs
+allows arbitrary hierarchies of data to be stored persistently in a conventional file system,
+with an unconventional implementation.
+It is intended for storage of critical data, supporting replication of data and metadata.
+Data and metadata are preserved in separate files of fixed size, which might be disk partitions.
+Data is stored in extents; metadata is stored in main memory, with persistence provided by entries made in a log, which can be replayed on start-up to reconstruct the metadata.
+The data is stored in
+.I datafile
+and the log is stored in
+.IR logfile .
+.PP
+.I Nubfs
+serves the contents of its storage using the 9P protocol.
+It posts the 9P service in
+.IR srv (3)
+as
+.I srvname
+(default:
+.BR nubfs ),
+allowing
+.BI /srv/ srvname
+to be used as a parameter to
+.I mount
+(see
+.IR bind (1)
+and
+.IR bind (2)).
+.PP
+.I Mknub
+makes a small test file system in
+.B /tmp/the.disk
+and
+.B /tmp/the.log
+with 16 Mbytes of data and 4 Mbytes of log.
+.PP
+The 
+.I debug
+options
+include:
+.TP
+.PD 0
+.B 9
+Trace the 9P protocol messages.
+.TP
+.B l
+Display the log entries during initial replay, and as they are made in response to 9P requests.
+.TP
+.B r
+Display log block tags during initial scan of the log.
+.TP
+.B w
+Display write requests during replay.
+.B S
+Force an internal log copy to sweep redundant log entries from the system.
+.PD
+.PP
+.I Nubinit (2)
+describes an independent library interface, usable by either user-level or kernel-level applications.
+.SH SOURCE
+.B /usr/forsyth/src/nubfs
+.SH SEE ALSO
+.IR nubinit (2),
+.IR flashfs (4),
+.IR kfs (4)
+.br
+``Flash File System for Inferno'', C H Forsyth, Vita Nuova, 2002.

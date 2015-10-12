@@ -1,0 +1,10 @@
+#!/bin/rc
+fn err {
+	echo mknub: $* >[1=2]
+	exit error
+}
+~ $#* 2 || err Usage: mknub data log ...
+test -f $1 || err $1 does not exist
+test -f $2 || err $2 does not exist
+dd -if /dev/zero -of $1 -bs 32k
+dd -if /dev/zero -of $2 -bs 32k
