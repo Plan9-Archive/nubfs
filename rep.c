@@ -58,17 +58,17 @@ lookfile(u32int p, char *why)
  * to be skipped when active is replayed.
  */
 void
-replayentry(LogEntry *le)
+replayentry(LogEntry *le, uint offset)
 {
 	if(le->seq <= cmdseq){
 		if(debug['l'])
-			fprint(2, "replay: dup/obsolete: %L\n", le);
+			fprint(2, "replay: dup/obsolete: %ud %L\n", offset, le);
 		return;
 	}
 	cmdseq = le->seq;
 
 	if(debug['l'])
-		fprint(2, "replay: %L\n", le);
+		fprint(2, "replay: %ud %L\n", offset, le);
 
 	switch(le->op){
 	case Create:
@@ -115,7 +115,7 @@ recreate(LogEntry *le)
 	if(parent == nil)
 		return 0;
 	if(parent->mode & DMDIR){
-		q = (Qid){le->create.newpath, 0, QTFILE};
+		q = (Qid){le->create.newpath, 0, le->create.perm>>24};
 		ne = mkentry(parent, le->create.name, q, le->create.perm, string(le->create.uid), string(le->create.gid), le->create.mtime, le->create.cvers);	/* muid? */
 		if(ne != nil){
 			if(ne->ref > 1)
@@ -210,7 +210,10 @@ reremove(LogEntry *le)
 	if((p = e->parent) == nil)
 		error("replay: parentless entry %8.8ux [%s]", le->path, e->name);
 	if(p->mode & DMDIR){
-		truncatefile(e);
+		if((e->mode & DMDIR) == 0)
+			truncatefile(e);
+		else if(e->files != nil)
+			error("replay: remove non-empty directory %8.8ux [%s]", le->path, e->name);
 		for(l = &p->files; *l != nil && *l != e; l = &(*l)->dnext){
 			/* skip */
 		}
@@ -274,7 +277,7 @@ copyentry(LogEntry *le)
 	Entry *f, *parent;
 	int i, keep, repack;
 
-	if(debug['l'])
+	if(debug['C'])
 		fprint(2, "copylog: %L ...", le);
 
 	keep = 0;
@@ -352,7 +355,7 @@ copyentry(LogEntry *le)
 			break;
 		if(f->cvers != le->write.cvers)
 			break;	/* completely obsolete */
-		i = le->write.exind & ~0x80;
+		i = le->write.exind & ~NewExtent;
 		if(i >= f->nd)
 			copyerror("extent index too high", le);	/* can't happen: truncate would change cvers */
 		if(!eqextent(f->data[i], le->write.ext))
@@ -367,7 +370,7 @@ copyentry(LogEntry *le)
 		break;
 	}
 
-	if(debug['l']){
+	if(debug['C']){
 		if(keep){
 			if(repack)
 				fprint(2, " ->\n\t%L\n", le);
