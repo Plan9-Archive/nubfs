@@ -12,6 +12,7 @@ void	nubsync(Fid*);
 void	nubwstat(Fid*, Dir*);
 void	nubclunk(Fid*);
 void	nubflush(void);
+void	nubsweep(void);
 
 Entry*	mkentry(Entry*, char*, Qid, u32int, String*, String*, u32int, u32int);
 void	putentry(Entry*);
@@ -31,11 +32,12 @@ uint	secsize(Disk*);
 uint	byte2sec(Disk*, u32int);
 
 LogFile*	logopen(int, u64int);
-void	logreplay(LogFile*, int, void (*)(LogEntry*));
+void	logreplay(LogFile*, int, void (*)(LogEntry*, uint));
 void	logsetcopy(LogFile*, int (*)(LogEntry*));
 void	logappend(LogFile*, LogEntry*);
 void	logcomplete(LogFile*);
 void	logflush(LogFile*);
+void	logsweep(LogFile*);
 
 uint	logpacksize(LogEntry*);
 int	logpack(uchar*, uint, LogEntry*);
@@ -53,7 +55,7 @@ u32int	nextpath(void);
 void	putpath(Entry*);
 
 void	replayinit(Disk*);
-void	replayentry(LogEntry*);
+void	replayentry(LogEntry*, uint);
 int copyentry(LogEntry*);
 
 void	ctlinit(Entry*, String*);
