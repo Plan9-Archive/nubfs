@@ -32,7 +32,6 @@ nubinit(LogFile *alog, Disk *adisk, char *uid)
 	ctlinit(altroot, user);
 	usersinit(altroot, user);
 	logsetcopy(thelog, copyentry);
-	fmtinstall('L', fmtL);
 }
 
 void
@@ -50,6 +49,12 @@ nubflush(void)
 {
 	/* could put Mark here, provided replicas can't then diverge */
 	logflush(thelog);
+}
+
+void
+nubsweep(void)
+{
+	logsweep(thelog);
 }
 
 Fid*
@@ -176,7 +181,6 @@ nubopen(Fid *f, uint omode)
 		setstring(&e->muid, f->user);
 		if(e->nd != 0 || e->length != 0){
 			truncatefile(e);
-			e->cvers++;
 			LogEntry log = {Trunc, e->qid.path, {.trunc={e->mtime, e->cvers, f->user->s}}};
 			nublog(log, nil, 0);
 		}
@@ -203,13 +207,13 @@ nubcreate(Fid *f, char *name, uint omode, u32int perm)
 		perm &= (~0777 | (dir->mode&0777));
 	}else
 		perm &= (~0666 | (dir->mode&0666));
-	ne = mkentry(f->entry, name, (Qid){nextpath(), 0, perm>>24}, perm, f->user, dir->gid, NOW, 0);
+	ne = mkentry(dir, name, (Qid){nextpath(), 0, perm>>24}, perm, f->user, dir->gid, NOW, 0);
 	if(ne == nil)
 		raise(nil);
-	LogEntry log = {Create, f->entry->qid.path, {
+	LogEntry log = {Create, dir->qid.path, {
 			.create={ne->qid.path, name, perm, ne->uid->s, ne->gid->s, ne->mtime, ne->cvers}}};
 	nublog(log, nil, 0);
-	putentry(f->entry);
+	putentry(dir);
 	f->entry = ne;
 	f->open = omode;
 	putpath(ne);
@@ -390,7 +394,9 @@ nubremove(Fid *f)
 	if(*l == nil)
 		raise(Ephase);
 	*l = e->dnext;
-	truncatefile(e);
+	putentry(e);	/* directory entry */
+	if((e->qid.type & QTDIR) == 0)
+		truncatefile(e);
 	p->mtime = NOW;
 	setstring(&p->muid, f->user);
 	LogEntry log = {Remove, e->qid.path, {.remove={p->mtime, p->muid->s}}};
@@ -399,7 +405,7 @@ nubremove(Fid *f)
 //print("e %q ref %ld\n", e->name, e->ref);
 	f->open = -1;
 	f->entry = nil;
-	putentry(e);
+	putentry(e);	/* fid */
 }
 
 void
@@ -450,8 +456,11 @@ nubwstat(Fid *f, Dir *d)
 		dosync = 0;
 	}
 	if(d->length != ~(u64int)0){
-		if(d->length != 0)
+		if(d->length != 0){
+			if(e->qid.type & QTDIR)
+				raise("wstat -- attempt to change directory length");
 			raise("wstat -- attempt to change length");	/* TO DO: later */
+		}
 		dosync = 0;
 	}
 	if(dosync){	/* sync-wstat */
@@ -478,8 +487,6 @@ nubwstat(Fid *f, Dir *d)
 		return;
 	if(d->length == 0 && e->length != 0){
 		truncatefile(e);
-		e->mtime = NOW;
-		e->cvers++;
 		LogEntry log = {Trunc, e->qid.path, {.trunc={e->mtime, e->cvers, f->user->s}}};
 		nublog(log, nil, 0);
 	}
@@ -576,6 +583,7 @@ mkentry(Entry *parent, char *name, Qid qid, u32int perm, String *uid, String *gi
 
 	qid.type = perm>>24;
 	e = emallocz(sizeof(*e), 0);
+	setmalloctag(e, getcallerpc(&parent));
 	e->ref = 1;
 	e->qid = qid;
 	e->name = estrdup(name);
@@ -624,6 +632,10 @@ putentry(Entry *e)
 void
 truncatefile(Entry *f)
 {
+	if(f->ref <= 0)
+		abort();
+	f->mtime = NOW;
+	f->cvers++;
 	f->qid.vers++;
 	f->length = 0;
 	for(int i = 0; i < f->nd; i++)
