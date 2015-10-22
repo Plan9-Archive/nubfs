@@ -110,7 +110,7 @@ main(int argc, char **argv)
 		error("can't create %s: %r", srvfile);
 	fprint(srvfd, "%d", pip[1]);
 	close(pip[1]);
-	switch(fork()){
+	switch(rfork(RFFDG|RFPROC|RFNAMEG|RFNOTEG)){
 	case 0:
 		server(pip[0]);
 		exits(nil);
@@ -308,6 +308,7 @@ rwalk(Req *r)
 	poperror();
 	r->r.nwqid = wq->nqid;
 	memmove(r->r.wqid, wq->qid, wq->nqid*sizeof(*wq->qid));
+	free(wq);
 }
 
 static void
@@ -398,6 +399,7 @@ rstat(Req *r)
 	nubstat(f, &d);	/* note that d refers to volatile strings */
 	n = sizeD2M(&d);
 	if(n > r->statsize){
+		free(r->statbuf);
 		r->statbuf = emallocz(n, 0);
 		r->statsize = n;
 	}
