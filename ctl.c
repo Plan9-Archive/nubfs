@@ -36,6 +36,8 @@ ctlwrite(Fid *f, void *a, usize count)
 		nubflush();
 	else if(strcmp(flds[0], "uname") == 0)
 		unamecmd(n-1, flds+1);
+	else if(strcmp(flds[0], "sweep") == 0)
+		nubsweep();
 	else
 		raise(Ebadctl);
 	return count;
