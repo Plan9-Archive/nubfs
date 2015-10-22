@@ -17,6 +17,8 @@ error(char *s, ...)
 	vsnprint(b, sizeof(b), s, ap);
 	va_end(ap);
 	fprint(2, "%s\n", b);
+	if(debug['D'])
+		abort();
 	exits("error");
 }
 
@@ -42,6 +44,7 @@ emallocz(usize n, int zero)
 	p = mallocz(n, zero);
 	if(p == nil)
 		error("out of memory");
+	setmalloctag(p, getcallerpc(&n));
 	return p;
 }
 
@@ -53,5 +56,6 @@ estrdup(char *s)
 	t = strdup(s);
 	if(t == nil)
 		error("out of memory");
+	setmalloctag(t, getcallerpc(&t));
 	return t;
 }
