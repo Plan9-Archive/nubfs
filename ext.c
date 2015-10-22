@@ -188,7 +188,7 @@ freeslice(Disk *disk, u64int addr, u32int size)
 	uint n;
 
 	DBG('d')print("freeslice %llud %ud\n", addr, size);
-	if((addr & (size-1)) != 0)
+	if(size == 0 || (addr & (size-1)) != 0)
 		error("invalid slice free: %llud %ud", addr, size);
 	n = log2of(size);
 	size = (u32int)1<<n;
