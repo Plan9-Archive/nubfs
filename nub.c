@@ -267,7 +267,7 @@ nubwrite(Fid *f, void *a, usize count, u64int offset)
 	if(e->qid.type & QTAPPEND)
 		offset = e->length;
 	e->mtime = NOW;
-	if(e->io)
+	if(e->io != nil)
 		return e->io(f, a, count, offset, 1);
 	p = a;
 	cap = 0;
@@ -350,7 +350,7 @@ nubread(Fid *f, void *a, usize count, u64int offset)
 		}
 		return p-(uchar*)a;
 	}
-	if(e->io)
+	if(e->io != nil)
 		return e->io(f, a, count, offset, 0);
 	if(offset > e->length)
 		return 0;
