@@ -25,7 +25,7 @@ void	diskread(Disk*, uchar*, usize, u64int);
 void	diskwrite(Disk*, uchar*, usize, u64int);
 void	diskzero(Disk*, u32int, u64int);
 void	freedisk(Disk*, Extent);
-void	diskdump(Disk*);
+char*	diskdump(Disk*);
 int	eqextent(Extent, Extent);
 u32int	extentsize(Disk*, u32int, u32int, uint);
 uint	secsize(Disk*);

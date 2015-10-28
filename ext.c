@@ -223,25 +223,28 @@ freeslice(Disk *disk, u64int addr, u32int size)
 	*l = s;
 }
 
-void
+char*
 diskdump(Disk *disk)
 {
+	Fmt fmt;
 	Slice *s;
 	int i;
 
-	print("disk %#p slices %d\n", disk, Nslice);
+	fmtstrinit(&fmt);
+	fmtprint(&fmt, "disk %#p slices %d\n", disk, Nslice);
 	for(i = 0; i < Nslice; i++){
 		if(disk->slices[i] != nil){
-			print("\t%2d:", i);
+			fmtprint(&fmt, "\t%2d:", i);
 			for(s = disk->slices[i]; s != nil; s = s->next)
-				print(" %llud", s->addr);
+				fmtprint(&fmt, " %llud", s->addr);
 			/* check for missed buddies (shouldn't happen) */
 			for(s = disk->slices[i]; s->next != nil; s = s->next)
 				if(s->addr == (s->next->addr ^ (1<<i)))
-					print(" [missed %llud %llud]", s->addr, s->next->addr);
-			print(" [%ud]\n", (u32int)1<<i);
+					fmtprint(&fmt, " [missed %llud %llud]", s->addr, s->next->addr);
+			fmtprint(&fmt, " [%ud]\n", (u32int)1<<i);
 		}
 	}
+	return fmtstrflush(&fmt);
 }
 
 int
