@@ -279,7 +279,7 @@ rattach(Req *r)
 		clunkfid(f);
 		raise(nil);
 	}
-	nubattach(f, string(r->t.uname), r->t.aname);
+	nubattach(f, r->t.uname, r->t.aname);
 	poperror();
 	r->r.qid = f->entry->qid;
 }
@@ -392,19 +392,20 @@ static void
 rstat(Req *r)
 {
 	Fid *f;
-	Dir d;
+	Dir *d;
 	usize n;
 
 	f = findfid(r->t.fid);
-	nubstat(f, &d);	/* note that d refers to volatile strings */
-	n = sizeD2M(&d);
+	d = nubstat(f);
+	n = sizeD2M(d);
 	if(n > r->statsize){
 		free(r->statbuf);
 		r->statbuf = emallocz(n, 0);
 		r->statsize = n;
 	}
-	r->r.nstat = convD2M(&d, r->statbuf, r->statsize);
+	r->r.nstat = convD2M(d, r->statbuf, r->statsize);
 	r->r.stat = r->statbuf;
+	free(d);
 }
 
 static void
