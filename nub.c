@@ -16,9 +16,10 @@ static LogFile*	thelog;
 
 static int wstatallow;
 
-static void e2d(Dir*, Entry*);
+static Dir*	e2d(Entry*);
 static int accessok(Entry*, String*, uint);
 static int nameexists(Entry*, char*);
+static void checkfilename(char*);
 static void nublog(LogEntry, void*, usize);
 
 void
@@ -58,8 +59,10 @@ nubsweep(void)
 }
 
 Fid*
-nubattach(Fid *f, String *uid, char *aname)
+nubattach(Fid *f, char *uname, char *aname)
 {
+	String *uid;
+
 	if(aname[0] != 0){
 		if(strcmp(aname, "ctl") == 0)
 			f->entry = altroot;
@@ -68,7 +71,10 @@ nubattach(Fid *f, String *uid, char *aname)
 	}else
 		f->entry = root;
 	incref(f->entry);
-	f->user = sincref(uid);
+	uid = name2uid(uname);
+	if(uid == nil)
+		uid = string(uname);	/* bootstrap */
+	f->user = uid;
 	return f;
 }
 
@@ -199,6 +205,7 @@ nubcreate(Fid *f, char *name, uint omode, u32int perm)
 		raise(Enotdir);
 	if(!accessok(dir, f->user, DMWRITE))
 		raise(Eperm);
+	checkfilename(name);
 	if(nameexists(dir, name))
 		raise(Eexist);
 	if(perm & DMDIR){
@@ -218,6 +225,16 @@ nubcreate(Fid *f, char *name, uint omode, u32int perm)
 	f->open = omode;
 	putpath(ne);
 	return f;
+}
+
+static void
+checkfilename(char *s)
+{
+	if(*s == 0 || strcmp(s, ".") == 0 || strcmp(s, "..") == 0)
+		raise("invalid file name");
+	for(; *s; s++)
+		if((*s&0xFF) < 0x40)
+			raise("invalid character in file name");
 }
 
 static int
@@ -320,7 +337,7 @@ usize
 nubread(Fid *f, void *a, usize count, u64int offset)
 {
 	Entry *e, *x;
-	Dir dir;
+	Dir *dir;
 	u64int off;
 	usize n;
 	int i;
@@ -336,15 +353,19 @@ nubread(Fid *f, void *a, usize count, u64int offset)
 	if(e->qid.type & QTDIR){
 		off = 0;
 		for(x = e->files; x != nil && count != 0; x = x->dnext){
-			e2d(&dir, x);
-			n = sizeD2M(&dir);
+			dir = e2d(x);
+			n = sizeD2M(dir);
 			if(off < offset){
+				free(dir);
 				off += n;
 				continue;
 			}
-			if(count < n)
+			if(count < n){
+				free(dir);
 				break;
-			n = convD2M(&dir, p, count);
+			}
+			n = convD2M(dir, p, count);
+			free(dir);
 			count -= n;
 			p += n;
 		}
@@ -408,10 +429,10 @@ nubremove(Fid *f)
 	putentry(e);	/* fid */
 }
 
-void
-nubstat(Fid *f, Dir *d)
+Dir*
+nubstat(Fid *f)
 {
-	e2d(d, f->entry);
+	return e2d(f->entry);
 }
 
 void
@@ -426,10 +447,12 @@ nubwstat(Fid *f, Dir *d)
 {
 	int dosync;
 	Entry *e;
+	String *uid, *gid;
 
 	e = f->entry;
 	dosync = 1;
 	if(d->name != nil && *d->name != 0 && strcmp(d->name, e->name) != 0){	/* change name (write permission in parent) */
+		checkfilename(d->name);
 		if(!accessok(e->parent, f->user, DMWRITE))
 			raise(Eperm);
 		if(e->parent != nil && nameexists(e->parent, d->name))
@@ -448,17 +471,27 @@ nubwstat(Fid *f, Dir *d)
 	if(d->uid != nil && *d->uid != 0 && strcmp(d->uid, e->uid->s) != 0){	/* change user (privileged) */
 		if(!wstatallow)
 			raise(Eperm);
+		uid = name2uid(d->uid);
+		if(uid == nil)
+			raise("wstat -- unknown uid");
+		putstring(uid);
 		dosync = 0;
 	}
 	if(d->gid != nil && *d->gid != 0 && strcmp(d->gid, e->gid->s) != 0){	/* change group (owner or old group leader, or member new group) */
 		if(e->uid != f->user && !wstatallow)	/* && e->gid != user */
 			raise(Eperm);
+		gid = name2uid(d->gid);
+		if(gid == nil)
+			raise("wstat -- unknown gid");
+		putstring(gid);
 		dosync = 0;
 	}
 	if(d->length != ~(u64int)0){
+		if((d->mode & DMAPPEND) != 0)
+			raise("wstat -- attempt to change length of append-only file");
 		if(d->length != 0){
 			if(e->qid.type & QTDIR)
-				raise("wstat -- attempt to change directory length");
+				raise("wstat -- attempt to change length of directory");
 			raise("wstat -- attempt to change length");	/* TO DO: later */
 		}
 		dosync = 0;
@@ -477,11 +510,11 @@ nubwstat(Fid *f, Dir *d)
 	}
 	if(d->uid != nil && *d->uid != 0 && strcmp(d->uid, e->uid->s) != 0){
 		putstring(e->uid);
-		e->uid = string(d->uid);
+		e->uid = name2uid(d->uid);
 	}
 	if(d->gid != nil && *d->gid != 0 && strcmp(d->gid, e->gid->s) != 0){
 		putstring(e->gid);
-		e->gid = string(d->gid);
+		e->gid = name2uid(d->gid);
 	}
 	if(e->io != nil)
 		return;
@@ -511,18 +544,54 @@ nubclunk(Fid *f)
 	f->entry = nil;
 	putentry(e);
 }
-	
-/*
- * relies on e not changing during d's lifetime
- */
-static void
-e2d(Dir *d, Entry *e)
+
+static String*
+nameofuid(String *uid)
 {
+	String *n;
+	char nbuf[128];
+
+	if(*uid->s == 0)
+		return sincref(uid);
+	n = uid2name(uid->s);
+	if(n != nil)
+		return n;
+	snprint(nbuf, sizeof(nbuf), "(%s)", uid->s);
+	return sincref(string(nbuf));
+}
+
+static char*
+appstr(char** p, char *s)
+{
+	char *t;
+
+	t = *p;
+	strcpy(t, s);
+	*p = t+strlen(t)+1;
+	return t;
+}
+
+static Dir*
+e2d(Entry *e)
+{
+	String *u, *g, *m;
+	Dir *d;
+	char *p;
+
+	u = nameofuid(e->uid);
+	g = nameofuid(e->gid);
+	m = nameofuid(e->muid);
+	d = emallocz(sizeof(*d)+strlen(u->s)+strlen(g->s)+strlen(m->s)+strlen(e->name)+4, 0);
+	p = (char*)d+sizeof(*d);
 	d->type = 0;
 	d->dev = 0;
-	d->uid = e->uid->s;
-	d->gid = e->gid->s;
-	d->muid = e->muid->s;
+	d->name = appstr(&p, e->name);
+	d->uid = appstr(&p, u->s);
+	putstring(u);
+	d->gid = appstr(&p, g->s);
+	putstring(g);
+	d->muid = appstr(&p, m->s);
+	putstring(m);
 	d->name = e->name;
 	d->mtime = e->mtime;
 	d->mode = e->mode;
@@ -534,6 +603,7 @@ e2d(Dir *d, Entry *e)
 	}else{
 		d->length = 0;
 	}
+	return d;
 }
 
 Fid*
