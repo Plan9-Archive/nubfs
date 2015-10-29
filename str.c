@@ -37,6 +37,7 @@ string(char *c)
 	}
 	n = strlen(c);
 	s = emallocz(sizeof(*s)+n+1, 0);
+	setmalloctag(s, getcallerpc(&c));
 	s->ref = 1;
 	s->n = n;
 	s->hash = h;
@@ -73,5 +74,6 @@ putstring(String *s)
 				break;
 			}
 		}
+		free(s);
 	}
 }
