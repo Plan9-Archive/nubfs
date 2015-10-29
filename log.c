@@ -297,6 +297,7 @@ bucketsort(LogBlkQ *q, uint maxn)
 			error("missing log seq %ud", minlog+i);
 		tack(q, blks[i]);
 	}
+	free(blks);
 }
 
 static void
