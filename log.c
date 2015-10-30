@@ -280,7 +280,7 @@ bucketsort(LogBlkQ *q, uint maxn)
 	if(n > maxn)
 		error("sequence number span out of range %ud %ud (%ud > %ud)",
 			minlog, maxlog, n, maxn);
-	if(minlog != 0)
+	if(minlog != 0 && !debug['O'])
 		error("block sequence does not start at 0");
 	blks = emallocz(n*sizeof(*blks), 1);
 	for(b = q->head; b != nil; b = b->next){
@@ -295,6 +295,8 @@ bucketsort(LogBlkQ *q, uint maxn)
 	for(i=0; i<n; i++){
 		if(blks[i] == nil)
 			error("missing log seq %ud", minlog+i);
+		if(debug['O'])
+			blks[i]->seq = q->len;
 		tack(q, blks[i]);
 	}
 	free(blks);
