@@ -1,5 +1,5 @@
 void	nubinit(LogFile*, Disk*, char*);
-Fid*	nubattach(Fid*, String*, char*);
+Fid*	nubattach(Fid*, char*, char*);
 Fid*	nubopen(Fid*, uint);
 Fid*	nubcreate(Fid*, char*, uint, u32int);
 Walkqid*	nubwalk(Fid*, Fid*, int, char**);
@@ -7,7 +7,7 @@ usize	nubread(Fid*, void*, usize, u64int);
 void	nubreplay(void);
 usize	nubwrite(Fid*, void*, usize, u64int);
 void	nubremove(Fid*);
-void	nubstat(Fid*, Dir*);
+Dir*	nubstat(Fid*);
 void	nubsync(Fid*);
 void	nubwstat(Fid*, Dir*);
 void	nubclunk(Fid*);
