@@ -139,11 +139,13 @@ retrunc(LogEntry *le)
 	f = lookfile(le->path, "trunc");
 	if(f == nil)
 		return 0;
+	if(f->mode & DMDIR)
+		error("replay: truncate directory %#8.8ux", le->path);
+	truncatefile(f);
 	f->mtime = le->trunc.mtime;
 	putstring(f->muid);
 	f->muid = string(le->trunc.muid);
 	f->cvers = le->trunc.cvers;
-	truncatefile(f);
 	return 1;
 }
 
