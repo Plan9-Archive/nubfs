@@ -233,7 +233,7 @@ checkfilename(char *s)
 	if(*s == 0 || strcmp(s, ".") == 0 || strcmp(s, "..") == 0)
 		raise("invalid file name");
 	for(; *s; s++)
-		if((*s&0xFF) < 0x40)
+		if((*s&0xFF) < 0x20)
 			raise("invalid character in file name");
 }
 
