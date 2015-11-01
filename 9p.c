@@ -370,6 +370,7 @@ rclunk(Req *r)
 	Fid *f;
 
 	f = findfid(r->t.fid);
+	nubclunk(f);
 	clunkfid(f);
 }
 
