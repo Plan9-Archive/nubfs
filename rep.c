@@ -99,6 +99,8 @@ replayentry(LogEntry *le, uint offset)
 		if(!rewstat(le))
 			badreplay(le);
 		break;
+	case Sync:
+		break;
 	default:
 		error("unexpected log entry: op %#x", le->op);
 		break;
@@ -366,6 +368,9 @@ copyentry(LogEntry *le)
 		break;
 	case Wstat:
 		/* always obsolete: Create has been updated from in-memory Entry */
+		break;
+	case Sync:
+		/* always obsolete */
 		break;
 	default:
 		copyerror("unexpected entry type", le);
