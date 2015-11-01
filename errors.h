@@ -25,3 +25,5 @@ char	Elength[];	/* write -- control request too long */
 char	Ebadctl[];	/* write -- bad control request */
 char	Enomem[];	/* out of memory */
 char	Etoobig[];	/* read or write too large */
+char	Elockbroken[];	/* exclusive lock broken */
+char	Elocked[];	/* exclusive lock */
