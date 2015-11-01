@@ -9,6 +9,7 @@
 typedef struct Array Array;
 typedef struct Disk Disk;
 typedef struct Entry Entry;
+typedef struct Excl Excl;
 typedef struct Extent Extent;
 typedef struct Fid Fid;
 typedef struct LogEntry LogEntry;
@@ -26,6 +27,8 @@ typedef u32int	FileOffset;
 
 enum{
 	Nextent=	24,
+
+	Tlock=	5*60,	/* seconds */
 };
 
 struct Array {
@@ -56,10 +59,16 @@ struct Extent {
 	FileOffset	 length;		/* extent length in bytes */
 };
 
+struct Excl {
+	Fid*	fid;
+	u32int	time;
+};
+
 struct Entry {
 	Ref;
 	Entry*	pnext;	/* path list */
 	Entry*	dnext;	/* directory list */
+	Excl*	excl;	/* exclusive open */
 
 	Qid	qid;
 	Entry*	parent;
