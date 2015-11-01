@@ -255,7 +255,7 @@ accessok(Entry *e, String *uid, uint perm)
 {
 	if(e == nil)
 		return 0;
-	if(strcmp(e->uid->s, "none") != 0){
+	if(strcmp(uid->s, "none") != 0){
 		if(e->uid == uid && ((e->mode>>6)&perm) == perm)
 			return 1;
 		if(ingroup(uid, e->gid) && ((e->mode>>3)&perm) == perm)
