@@ -21,6 +21,8 @@ static int accessok(Entry*, String*, uint);
 static int nameexists(Entry*, char*);
 static void checkfilename(char*);
 static void nublog(LogEntry, void*, usize);
+static void nubnoexcl(Entry*, Fid*);
+static int nubexcl(Entry*, Fid*);
 
 void
 nubinit(LogFile *alog, Disk *adisk, char *uid)
@@ -182,6 +184,9 @@ nubopen(Fid *f, uint omode)
 		raise(Eperm);
 	if(omode & ORCLOSE && !accessok(e->parent, f->user, DMWRITE))
 		raise(Eperm);
+	if((e->mode & DMEXCL) != 0 && !nubexcl(e, f))
+		raise(Elocked);
+	f->open = omode;
 	if(omode & OTRUNC && (e->mode & DMAPPEND) == 0 && e->io == nil){
 		e->mtime = NOW;
 		setstring(&e->muid, f->user);
@@ -191,7 +196,6 @@ nubopen(Fid *f, uint omode)
 			nublog(log, nil, 0);
 		}
 	}
-	f->open = omode;
 	return f;
 }
 
@@ -221,6 +225,9 @@ nubcreate(Fid *f, char *name, uint omode, u32int perm)
 			.create={ne->qid.path, name, perm, ne->uid->s, ne->gid->s, ne->mtime, ne->cvers}}};
 	nublog(log, nil, 0);
 	putentry(dir);
+	f->entry = nil;
+	if((ne->mode & DMEXCL) != 0 && !nubexcl(ne, f))
+		raise(Elocked);
 	f->entry = ne;
 	f->open = omode;
 	putpath(ne);
@@ -279,6 +286,8 @@ nubwrite(Fid *f, void *a, usize count, u64int offset)
 	e = f->entry;
 	if(e->qid.type & QTDIR)
 		raise(Eperm);	/* should be detected earlier */
+	if(e->excl != nil && !nubexcl(e, f))
+		raise(Elockbroken);
 	if(count == 0)
 		return 0;
 	if(e->qid.type & QTAPPEND)
@@ -348,6 +357,8 @@ nubread(Fid *f, void *a, usize count, u64int offset)
 	if((f->open&3) == OWRITE)
 		raise(Eaccess);
 	e = f->entry;
+	if(e->excl != nil && !nubexcl(e, f))
+		raise(Elockbroken);
 	e->atime = NOW;
 	p = a;
 	if(e->qid.type & QTDIR){
@@ -373,7 +384,7 @@ nubread(Fid *f, void *a, usize count, u64int offset)
 	}
 	if(e->io != nil)
 		return e->io(f, a, count, offset, 0);
-	if(offset > e->length)
+	if(count == 0 || offset > e->length)
 		return 0;
 	if(offset+count > e->length)
 		count = e->length - offset;
@@ -399,6 +410,10 @@ nubremove(Fid *f)
 {
 	Entry *e, *p, **l;
 
+	if(waserror()){
+		nubclunk(f);
+		raise(nil);
+	}
 	e = f->entry;
 	if(e->parent == nil)
 		raise(Eperm);
@@ -424,9 +439,8 @@ nubremove(Fid *f)
 	nublog(log, nil, 0);
 	lookpath(e->qid.path, 1);
 //print("e %q ref %ld\n", e->name, e->ref);
-	f->open = -1;
-	f->entry = nil;
-	putentry(e);	/* fid */
+	poperror();
+	nubclunk(f);
 }
 
 Dir*
@@ -537,11 +551,20 @@ nubclunk(Fid *f)
 	if(f == nil)
 		return;
 	if(f->open >= 0 && f->open & ORCLOSE){
-		nubremove(f);
+		f->open &= ~ORCLOSE;
 		/* clunk(5) says errors ignored */
+		if(!waserror()){
+			nubremove(f);
+			poperror();
+			/* remove also clunks */
+			return;
+		}
 	}
 	e = f->entry;
+	f->open = -1;
 	f->entry = nil;
+	if(e->excl != nil)
+		nubnoexcl(e, f);
 	putentry(e);
 }
 
@@ -605,6 +628,49 @@ e2d(Entry *e)
 	}
 	return d;
 }
+
+/*
+ * locks
+ */
+
+static int
+nubexcl(Entry *e, Fid *f)
+{
+	Excl *x;
+
+	x = e->excl;
+	if(x == nil){
+		x = emallocz(sizeof(*x), 0);
+		e->excl = x;
+	}else if(x->fid == nil || x->time < NOW){
+		/* old lock broken */
+		if(x->fid == f){
+			nubnoexcl(e, f);
+			return 0;
+		}
+	}else if(x->fid != f)
+		return 0;
+	/* locked by f */
+	x->fid = f;
+	x->time = NOW+Tlock;
+	return 1;
+}
+
+static void
+nubnoexcl(Entry *e, Fid *f)
+{
+	Excl *x;
+
+	x = e->excl;
+	if(x != nil && x->fid == f){
+		e->excl = nil;
+		free(x);
+	}
+}
+
+/*
+ * fids
+ */
 
 Fid*
 mkfid(u32int fid, String *user)
@@ -672,6 +738,7 @@ mkentry(Entry *parent, char *name, Qid qid, u32int perm, String *uid, String *gi
 		e->files = nil;
 	e->parent = parent;
 	e->dnext = nil;
+	e->excl = nil;
 
 	if(parent != nil){
 		parent->qid.vers++;
