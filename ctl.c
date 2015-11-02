@@ -43,9 +43,9 @@ ctlwrite(Fid *f, void *a, usize count)
 	else if(strcmp(flds[0], "disallow") == 0)
 		wstatallow = 0;
 	else if(strcmp(flds[0], "permit") == 0)
-		nopermcheck = 0;
-	else if(strcmp(flds[0], "nopermit") == 0)
 		nopermcheck = 1;
+	else if(strcmp(flds[0], "nopermit") == 0)
+		nopermcheck = 0;
 	else
 		raise(Ebadctl);
 	return count;
