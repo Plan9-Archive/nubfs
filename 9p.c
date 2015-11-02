@@ -105,7 +105,7 @@ main(int argc, char **argv)
 
 	if(pipe(pip) < 0)
 		error("can't pipe: %r");
-	srvfd = create(srvfile, OWRITE|ORCLOSE, 0600);
+	srvfd = create(srvfile, OWRITE|ORCLOSE, 0666);
 	if(srvfd < 0)
 		error("can't create %s: %r", srvfile);
 	fprint(srvfd, "%d", pip[1]);
