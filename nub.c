@@ -14,12 +14,11 @@ static Entry*	altroot;
 static Disk*	disk;
 static LogFile*	thelog;
 
-static int wstatallow;
-
 static Dir*	e2d(Entry*);
 static int accessok(Entry*, String*, uint);
 static int nameexists(Entry*, char*);
 static void checkfilename(char*);
+static int leadseither(String*, String*, char*);
 static void nublog(LogEntry, void*, usize);
 static void nubnoexcl(Entry*, Fid*);
 static int nubexcl(Entry*, Fid*);
@@ -257,6 +256,8 @@ accessok(Entry *e, String *uid, uint perm)
 	}
 	if((e->mode&perm) == perm)
 		return 1;
+	if(nopermcheck)
+		return 1;
 	return 0;
 }
 
@@ -457,23 +458,16 @@ nubwstat(Fid *f, Dir *d)
 	Entry *e;
 	String *uid, *gid;
 
+	if(strcmp(f->user->s, "none") == 0)
+		raise(Eperm);
 	e = f->entry;
 	dosync = 1;
 	if(d->name != nil && *d->name != 0 && strcmp(d->name, e->name) != 0){	/* change name (write permission in parent) */
 		checkfilename(d->name);
-		if(!accessok(e->parent, f->user, DMWRITE))
+		if(!accessok(e->parent, f->user, DMWRITE) && !wstatallow)
 			raise(Eperm);
 		if(e->parent != nil && nameexists(e->parent, d->name))
 			raise(Eexist);
-		dosync = 0;
-	}
-	if(d->mode != ~0){	/* change mode (owner or group leader) */
-		if(e->uid != f->user && !wstatallow)	/* TO DO: or group leader */
-			raise(Eperm);
-		if(d->mode & ~(DMDIR|DMAPPEND|DMEXCL|DMTMP|0777))
-			raise("wstat -- unknown bits in mode/qid.type");
-		if((d->mode & DMDIR) != (e->mode & DMDIR))
-			raise("wstat -- attempt to change directory");
 		dosync = 0;
 	}
 	if(d->uid != nil && *d->uid != 0 && strcmp(d->uid, e->uid->s) != 0){	/* change user (privileged) */
@@ -486,12 +480,26 @@ nubwstat(Fid *f, Dir *d)
 		dosync = 0;
 	}
 	if(d->gid != nil && *d->gid != 0 && strcmp(d->gid, e->gid->s) != 0){	/* change group (owner or old group leader, or member new group) */
-		if(e->uid != f->user && !wstatallow)	/* && e->gid != user */
+		if(!wstatallow && e->uid != f->user && !leadsgroup(f->user->s, e->gid->s))
 			raise(Eperm);
 		gid = name2uid(d->gid);
 		if(gid == nil)
 			raise("wstat -- unknown gid");
 		putstring(gid);
+		dosync = 0;
+	}
+	if(d->mode != ~0){	/* change mode (owner or group leader) */
+		if(d->mode & ~(DMDIR|DMAPPEND|DMEXCL|DMTMP|0777))
+			raise("wstat -- unknown bits in mode/qid.type");
+		if((d->mode & DMDIR) != (e->mode & DMDIR))
+			raise("wstat -- attempt to change directory");
+		if(!wstatallow && e->uid != f->user && !leadseither(f->user, e->gid, d->gid))
+			raise(Eperm);
+		dosync = 0;
+	}
+	if(d->mtime != ~0){	/* change time */
+		if(!wstatallow && e->uid != f->user && !leadseither(f->user, e->gid, d->gid))
+			raise(Eperm);
 		dosync = 0;
 	}
 	if(d->length != ~(u64int)0){
@@ -535,6 +543,16 @@ nubwstat(Fid *f, Dir *d)
 		e->mtime = d->mtime;
 	LogEntry log = {Wstat, e->qid.path, {.wstat = {d->mode, d->name, d->uid, d->gid, e->muid->s, e->mtime, e->atime}}};
 	nublog(log, nil, 0);
+}
+
+static int
+leadseither(String *uid, String *egid, char *ngid)
+{
+	if(leadsgroup(uid->s, egid->s))
+		return 1;
+	if(ngid != nil && *ngid != 0 && leadsgroup(uid->s, ngid))
+		return 1;
+	return 0;
 }
 
 void
