@@ -38,6 +38,14 @@ ctlwrite(Fid *f, void *a, usize count)
 		unamecmd(n-1, flds+1);
 	else if(strcmp(flds[0], "sweep") == 0)
 		nubsweep();
+	else if(strcmp(flds[0], "allow") == 0)
+		wstatallow = 1;
+	else if(strcmp(flds[0], "disallow") == 0)
+		wstatallow = 0;
+	else if(strcmp(flds[0], "permit") == 0)
+		nopermcheck = 0;
+	else if(strcmp(flds[0], "nopermit") == 0)
+		nopermcheck = 1;
 	else
 		raise(Ebadctl);
 	return count;
