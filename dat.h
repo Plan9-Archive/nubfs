@@ -205,6 +205,8 @@ struct Context {
 Context staticctx;
 uchar debug[256];
 int	exiting;
+int	wstatallow;
+int	nopermcheck;
 
 #define	waserror()	(staticctx.nerror++, setjmp(staticctx.errors[staticctx.nerror-1]))
 #define	poperror()	staticctx.nerror--
