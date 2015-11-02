@@ -80,3 +80,6 @@ void	adduser(char*, char*, char*, int, char**);
 int	deluser(char*);
 void	unamecmd(int, char**);
 void	usersinit(Entry*, String*);
+int	ingroup(char*, char*);
+int	leadsgroup(char*, char*);
+

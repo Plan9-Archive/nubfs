@@ -245,12 +245,6 @@ checkfilename(char *s)
 }
 
 static int
-ingroup(String *uid, String *gid)
-{
-	return uid == gid;
-}
-
-static int
 accessok(Entry *e, String *uid, uint perm)
 {
 	if(e == nil)
@@ -258,7 +252,7 @@ accessok(Entry *e, String *uid, uint perm)
 	if(strcmp(uid->s, "none") != 0){
 		if(e->uid == uid && ((e->mode>>6)&perm) == perm)
 			return 1;
-		if(ingroup(uid, e->gid) && ((e->mode>>3)&perm) == perm)
+		if(ingroup(uid->s, e->gid->s) && ((e->mode>>3)&perm) == perm)
 			return 1;
 	}
 	if((e->mode&perm) == perm)
